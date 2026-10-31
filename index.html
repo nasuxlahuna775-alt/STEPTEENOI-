@@ -164,15 +164,16 @@ input[type="text"]:focus-visible, textarea:focus-visible, input[type="radio"]:fo
   </form>
 
   <section class="result" id="result" hidden aria-live="polite">
-    <h2>ใบสมัครพร้อมส่ง</h2>
-    <p>ฟอร์มนี้ยังไม่ส่งให้เอง กดคัดลอกข้อความด้านล่าง แล้วทักไปที่ FB Tar DiffStyle</p>
-    <label for="out" class="hint">ข้อความใบสมัคร</label>
-    <p class="saved" id="saveStatus" role="status"></p>
-    <textarea id="out" readonly></textarea>
-    <div class="actions">
-      <button type="button" class="btn primary" id="copy">คัดลอกข้อความ</button>
-      <button type="button" class="btn" id="edit">แก้ไขข้อมูล</button>
-      <span class="status" id="status" role="status"></span>
+    <h2 id="saveStatus" role="status"></h2>
+    <p id="afterMsg" hidden>ส่งใบสมัครแล้ว รอรับข้อความทางเฟซบุ๊กนะครับ</p>
+    <div id="fallback" hidden>
+      <p>ส่งอัตโนมัติไม่ได้ กดคัดลอกข้อความด้านล่าง แล้วทักไปที่ FB Tar DiffStyle</p>
+      <textarea id="out" readonly></textarea>
+      <div class="actions">
+        <button type="button" class="btn primary" id="copy">คัดลอกข้อความ</button>
+        <button type="button" class="btn" id="edit">แก้ไขข้อมูล</button>
+        <span class="status" id="status" role="status"></span>
+      </div>
     </div>
   </section>
 
@@ -256,10 +257,17 @@ input[type="text"]:focus-visible, textarea:focus-visible, input[type="radio"]:fo
     openForm();
   });
 
+  function showFallback() {
+    document.getElementById('fallback').hidden = false;
+  }
+
   function saveApplication() {
-    saveEl.textContent = '';
+    var fb = document.getElementById('fallback');
+    fb.hidden = true;
+    document.getElementById('afterMsg').hidden = true;
     if (!ACCESS_KEY) {
-      saveEl.textContent = 'กดคัดลอกข้อความแล้วส่งทาง FB Tar DiffStyle';
+      saveEl.textContent = 'ส่งอัตโนมัติไม่ได้';
+      showFallback();
       return;
     }
     saveEl.textContent = 'กำลังส่ง...';
@@ -269,19 +277,35 @@ input[type="text"]:focus-visible, textarea:focus-visible, input[type="radio"]:fo
       exp: val('exp'), weapon: val('weapon'), food: val('food'), time: val('time'),
       message: build()
     };
-    fetch(ENDPOINT, {
+    var info = {
+      gameName: data.gameName, facebook: data.facebook, email: data.email,
+      exp: data.exp, weapon: data.weapon, food: data.food, time: data.time
+    };
+    var mail = fetch(ENDPOINT, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
       body: JSON.stringify(data)
-    }).then(function (r) {
-      saveEl.textContent = r.ok ? 'ส่งใบสมัครเรียบร้อยแล้ว ✓' : 'ส่งไม่สำเร็จ ให้กดคัดลอกข้อความแล้วส่งเอง';
-    }, function () {
-      saveEl.textContent = 'ส่งไม่สำเร็จ ให้กดคัดลอกข้อความแล้วส่งเอง';
+    }).then(function (r) { return r.ok; }, function () { return false; });
+    var disc = fetch('/api/discord', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(info)
+    }).then(function (r) { return r.ok; }, function () { return false; });
+    Promise.all([mail, disc]).then(function (res) {
+      if (res[0] || res[1]) {
+        saveEl.textContent = 'ส่งใบสมัครเรียบร้อยแล้ว ✓';
+        document.getElementById('afterMsg').hidden = false;
+        form.hidden = true;
+      } else {
+        saveEl.textContent = 'ส่งไม่สำเร็จ';
+        showFallback();
+      }
     });
   }
 
   document.getElementById('edit').addEventListener('click', function () {
     result.hidden = true;
+    form.hidden = false;
     form.scrollIntoView({ behavior: 'smooth', block: 'start' });
   });
 
